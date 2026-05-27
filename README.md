@@ -1,14 +1,16 @@
-# UI Review Tool
+# Design Compare Canvas
 
-A focused React app for running UI review passes against screenshots or screen targets.
+A focused React app for comparing a design draft against a live build.
 
 ## Features
 
-- Readiness score built from checklist progress and open findings.
-- Category tabs for accessibility, responsive layout, interaction, content, and performance.
-- Desktop, tablet, and mobile review frames.
-- Screenshot upload with local preview.
-- Finding queue with severity filtering, search, status toggles, and JSON export.
+- Side-by-side design and live canvases.
+- Screenshot upload for both sides.
+- Live URL preview for the production side when the target allows embedding.
+- Desktop, tablet, and mobile viewport frames.
+- Shared zoom and guide overlays for visual alignment.
+- Comparison queue for typography, spacing, color, and layout parameters.
+- JSON export and Markdown report copy.
 
 ## Development
 

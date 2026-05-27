@@ -1,215 +1,276 @@
 import {
-  Accessibility,
   AlertTriangle,
   CheckCircle2,
   ClipboardCheck,
-  ClipboardList,
+  Columns3,
+  Copy,
   Download,
   Eye,
-  Gauge,
+  FileImage,
+  Globe2,
   ImageUp,
-  Layers3,
   Monitor,
-  MousePointer2,
-  Plus,
-  Search,
+  Palette,
+  Ruler,
+  ScanSearch,
+  SlidersHorizontal,
   Smartphone,
   Tablet,
-  Trash2,
+  Type,
   XCircle,
-  Zap,
 } from 'lucide-react'
 import {
   useMemo,
   useReducer,
   useState,
   type ChangeEvent,
-  type FormEvent,
-  type KeyboardEvent,
+  type ReactNode,
 } from 'react'
-import { checklistItems, reviewCategories, seedFindings } from './data/reviewData'
-import { useDebounce } from './hooks/useDebounce'
-import type {
-  CategoryId,
-  Finding,
-  FindingDraft,
-  Severity,
-  Viewport,
-} from './types'
+import type { Viewport } from './types'
 
-type SeverityFilter = Severity | 'all'
+type CanvasSide = 'design' | 'live'
+type ComparisonCategory = 'typography' | 'spacing' | 'color' | 'layout'
+type ComparisonStatus = 'pass' | 'review' | 'fail'
 
-interface ReviewState {
-  targetUrl: string
+interface SourceState {
+  label: string
+  url: string
+  imageDataUrl: string
+}
+
+interface ComparisonItem {
+  id: string
+  category: ComparisonCategory
+  label: string
+  designValue: string
+  liveValue: string
+  delta: string
+  status: ComparisonStatus
+}
+
+interface CompareState {
+  design: SourceState
+  live: SourceState
   viewport: Viewport
-  activeCategory: CategoryId
-  checklist: Record<string, boolean>
-  findings: Finding[]
-  query: string
-  severityFilter: SeverityFilter
-  screenshotDataUrl: string
+  zoom: number
+  guidesVisible: boolean
+  selectedCategory: ComparisonCategory | 'all'
+  items: ComparisonItem[]
 }
 
-type ReviewAction =
-  | { type: 'set-target'; value: string }
+type CompareAction =
+  | { type: 'set-label'; side: CanvasSide; value: string }
+  | { type: 'set-url'; side: CanvasSide; value: string }
+  | { type: 'set-image'; side: CanvasSide; dataUrl: string }
+  | { type: 'clear-image'; side: CanvasSide }
   | { type: 'set-viewport'; viewport: Viewport }
-  | { type: 'set-active-category'; category: CategoryId }
-  | { type: 'toggle-checklist-item'; id: string }
-  | { type: 'set-query'; value: string }
-  | { type: 'set-severity-filter'; severity: SeverityFilter }
-  | { type: 'set-screenshot'; dataUrl: string }
-  | { type: 'add-finding'; finding: Finding }
-  | { type: 'toggle-finding-status'; id: string }
-  | { type: 'remove-finding'; id: string }
+  | { type: 'set-zoom'; zoom: number }
+  | { type: 'toggle-guides' }
+  | { type: 'set-category'; category: ComparisonCategory | 'all' }
 
-interface ReviewMetrics {
-  readiness: number
-  checkedCount: number
-  checklistCount: number
-  openCount: number
-  resolvedCount: number
-  criticalOpen: number
-  majorOpen: number
-  statusLabel: string
+interface CompareMetrics {
+  matchScore: number
+  passCount: number
+  reviewCount: number
+  failCount: number
+  sourceState: 'empty' | 'partial' | 'ready'
 }
 
-const starterCompleted = new Set([
-  'a11y-labels',
-  'layout-mobile',
-  'layout-density',
-  'interaction-controls',
-  'content-hierarchy',
-  'perf-assets',
-])
+const comparisonItems: ComparisonItem[] = [
+  {
+    id: 'font-heading',
+    category: 'typography',
+    label: 'Primary heading',
+    designValue: '32px / 700 / -',
+    liveValue: '30px / 700 / -',
+    delta: '-2px',
+    status: 'review',
+  },
+  {
+    id: 'font-body',
+    category: 'typography',
+    label: 'Body text',
+    designValue: '16px / 400 / 24px',
+    liveValue: '16px / 400 / 24px',
+    delta: '0',
+    status: 'pass',
+  },
+  {
+    id: 'gap-section',
+    category: 'spacing',
+    label: 'Section gap',
+    designValue: '32px',
+    liveValue: '24px',
+    delta: '-8px',
+    status: 'fail',
+  },
+  {
+    id: 'padding-card',
+    category: 'spacing',
+    label: 'Panel padding',
+    designValue: '20px',
+    liveValue: '18px',
+    delta: '-2px',
+    status: 'review',
+  },
+  {
+    id: 'color-primary',
+    category: 'color',
+    label: 'Primary action',
+    designValue: '#147D68',
+    liveValue: '#15806A',
+    delta: 'Delta E 1.8',
+    status: 'pass',
+  },
+  {
+    id: 'color-muted',
+    category: 'color',
+    label: 'Muted text',
+    designValue: '#657168',
+    liveValue: '#737D76',
+    delta: 'Delta E 6.4',
+    status: 'review',
+  },
+  {
+    id: 'width-main',
+    category: 'layout',
+    label: 'Main content width',
+    designValue: '760px',
+    liveValue: '744px',
+    delta: '-16px',
+    status: 'review',
+  },
+  {
+    id: 'radius-panel',
+    category: 'layout',
+    label: 'Panel radius',
+    designValue: '8px',
+    liveValue: '8px',
+    delta: '0',
+    status: 'pass',
+  },
+]
 
-const initialState: ReviewState = {
-  targetUrl: 'https://app.example.com/review',
+const initialState: CompareState = {
+  design: {
+    label: 'Design draft',
+    url: '',
+    imageDataUrl: '',
+  },
+  live: {
+    label: 'Live build',
+    url: '',
+    imageDataUrl: '',
+  },
   viewport: 'desktop',
-  activeCategory: 'accessibility',
-  checklist: Object.fromEntries(
-    checklistItems.map((item) => [item.id, starterCompleted.has(item.id)]),
-  ),
-  findings: seedFindings,
-  query: '',
-  severityFilter: 'all',
-  screenshotDataUrl: '',
+  zoom: 82,
+  guidesVisible: true,
+  selectedCategory: 'all',
+  items: comparisonItems,
 }
 
-function reviewReducer(state: ReviewState, action: ReviewAction): ReviewState {
+function compareReducer(state: CompareState, action: CompareAction): CompareState {
   switch (action.type) {
-    case 'set-target':
-      return { ...state, targetUrl: action.value }
-    case 'set-viewport':
-      return { ...state, viewport: action.viewport }
-    case 'set-active-category':
-      return { ...state, activeCategory: action.category }
-    case 'toggle-checklist-item':
+    case 'set-label':
       return {
         ...state,
-        checklist: {
-          ...state.checklist,
-          [action.id]: !state.checklist[action.id],
+        [action.side]: {
+          ...state[action.side],
+          label: action.value,
         },
       }
-    case 'set-query':
-      return { ...state, query: action.value }
-    case 'set-severity-filter':
-      return { ...state, severityFilter: action.severity }
-    case 'set-screenshot':
-      return { ...state, screenshotDataUrl: action.dataUrl }
-    case 'add-finding':
-      return { ...state, findings: [action.finding, ...state.findings] }
-    case 'toggle-finding-status':
+    case 'set-url':
       return {
         ...state,
-        findings: state.findings.map((finding) =>
-          finding.id === action.id
-            ? {
-                ...finding,
-                status: finding.status === 'open' ? 'resolved' : 'open',
-              }
-            : finding,
-        ),
+        [action.side]: {
+          ...state[action.side],
+          url: action.value,
+        },
       }
-    case 'remove-finding':
+    case 'set-image':
       return {
         ...state,
-        findings: state.findings.filter((finding) => finding.id !== action.id),
+        [action.side]: {
+          ...state[action.side],
+          imageDataUrl: action.dataUrl,
+        },
       }
+    case 'clear-image':
+      return {
+        ...state,
+        [action.side]: {
+          ...state[action.side],
+          imageDataUrl: '',
+        },
+      }
+    case 'set-viewport':
+      return { ...state, viewport: action.viewport }
+    case 'set-zoom':
+      return { ...state, zoom: action.zoom }
+    case 'toggle-guides':
+      return { ...state, guidesVisible: !state.guidesVisible }
+    case 'set-category':
+      return { ...state, selectedCategory: action.category }
     default:
       return state
   }
 }
 
 export function App() {
-  const [state, dispatch] = useReducer(reviewReducer, initialState)
+  const [state, dispatch] = useReducer(compareReducer, initialState)
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>(
     'idle',
   )
-  const debouncedQuery = useDebounce(state.query, 180)
 
-  const metrics = useMemo(
-    () => getReviewMetrics(state.checklist, state.findings),
-    [state.checklist, state.findings],
-  )
-
-  const activeChecklistItems = useMemo(
+  const metrics = useMemo(() => getCompareMetrics(state), [state])
+  const visibleItems = useMemo(
     () =>
-      checklistItems.filter((item) => item.category === state.activeCategory),
-    [state.activeCategory],
+      state.items.filter(
+        (item) =>
+          state.selectedCategory === 'all' ||
+          item.category === state.selectedCategory,
+      ),
+    [state.items, state.selectedCategory],
   )
-
-  const filteredFindings = useMemo(() => {
-    const query = debouncedQuery.trim().toLowerCase()
-
-    return state.findings.filter((finding) => {
-      const matchesSeverity =
-        state.severityFilter === 'all' ||
-        finding.severity === state.severityFilter
-      const matchesQuery =
-        query.length === 0 ||
-        [finding.title, finding.note, finding.owner]
-          .join(' ')
-          .toLowerCase()
-          .includes(query)
-
-      return matchesSeverity && matchesQuery
-    })
-  }, [debouncedQuery, state.findings, state.severityFilter])
-
   const report = useMemo(
-    () => buildReport(state, metrics),
+    () => ({
+      generatedAt: new Date().toISOString(),
+      design: {
+        label: state.design.label,
+        url: state.design.url,
+        hasScreenshot: Boolean(state.design.imageDataUrl),
+      },
+      live: {
+        label: state.live.label,
+        url: state.live.url,
+        hasScreenshot: Boolean(state.live.imageDataUrl),
+      },
+      viewport: state.viewport,
+      zoom: state.zoom,
+      metrics,
+      items: state.items,
+    }),
     [metrics, state],
   )
 
-  const handleScreenshotChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file || !file.type.startsWith('image/')) {
-      return
-    }
+  const handleImageChange =
+    (side: CanvasSide) => (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      if (!file || !file.type.startsWith('image/')) {
+        return
+      }
 
-    const reader = new FileReader()
-    reader.onload = () => {
-      dispatch({
-        type: 'set-screenshot',
-        dataUrl: typeof reader.result === 'string' ? reader.result : '',
-      })
+      const reader = new FileReader()
+      reader.onload = () => {
+        dispatch({
+          type: 'set-image',
+          side,
+          dataUrl: typeof reader.result === 'string' ? reader.result : '',
+        })
+      }
+      reader.readAsDataURL(file)
+      event.target.value = ''
     }
-    reader.readAsDataURL(file)
-    event.target.value = ''
-  }
-
-  const handleExportJson = () => {
-    const blob = new Blob([JSON.stringify(report, null, 2)], {
-      type: 'application/json',
-    })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'ui-review-report.json'
-    link.click()
-    URL.revokeObjectURL(url)
-  }
 
   const handleCopyReport = async () => {
     try {
@@ -222,8 +283,20 @@ export function App() {
     }
   }
 
+  const handleExportJson = () => {
+    const blob = new Blob([JSON.stringify(report, null, 2)], {
+      type: 'application/json',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'ui-comparison-report.json'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
-    <main className="app">
+    <main className="app compare-app">
       <PageHeader
         copyState={copyState}
         metrics={metrics}
@@ -231,70 +304,85 @@ export function App() {
         onExportJson={handleExportJson}
       />
 
-      <div className="workspace-grid">
-        <aside className="side-stack" aria-label="Review setup">
-          <TargetPanel
-            screenshotAttached={Boolean(state.screenshotDataUrl)}
-            targetUrl={state.targetUrl}
-            onClearScreenshot={() =>
-              dispatch({ type: 'set-screenshot', dataUrl: '' })
-            }
-            onScreenshotChange={handleScreenshotChange}
-            onTargetChange={(value) =>
-              dispatch({ type: 'set-target', value })
-            }
-          />
-          <ScorePanel metrics={metrics} />
-          <ViewportSwitch
-            viewport={state.viewport}
-            onChange={(viewport) =>
-              dispatch({ type: 'set-viewport', viewport })
-            }
-          />
-        </aside>
-
-        <PreviewPanel
-          activeCategory={state.activeCategory}
-          screenshotDataUrl={state.screenshotDataUrl}
+      <section className="compare-toolbar" aria-label="Comparison controls">
+        <ViewportSwitch
           viewport={state.viewport}
+          onChange={(viewport) =>
+            dispatch({ type: 'set-viewport', viewport })
+          }
         />
+        <label className="range-field">
+          <span>Zoom</span>
+          <input
+            type="range"
+            min="56"
+            max="120"
+            step="2"
+            value={state.zoom}
+            onChange={(event) =>
+              dispatch({ type: 'set-zoom', zoom: Number(event.target.value) })
+            }
+          />
+          <strong>{state.zoom}%</strong>
+        </label>
+        <button
+          className="button secondary"
+          type="button"
+          aria-pressed={state.guidesVisible}
+          onClick={() => dispatch({ type: 'toggle-guides' })}
+        >
+          <Ruler size={17} aria-hidden="true" />
+          Guides
+        </button>
+      </section>
 
-        <section className="inspector-stack" aria-label="Review findings">
-          <ChecklistPanel
-            activeCategory={state.activeCategory}
-            items={activeChecklistItems}
-            selectedItems={state.checklist}
-            onCategoryChange={(category) =>
-              dispatch({ type: 'set-active-category', category })
-            }
-            onToggleItem={(id) =>
-              dispatch({ type: 'toggle-checklist-item', id })
-            }
-          />
-          <FindingsPanel
-            activeCategory={state.activeCategory}
-            findings={filteredFindings}
-            query={state.query}
-            severityFilter={state.severityFilter}
-            viewport={state.viewport}
-            onAddFinding={(finding) =>
-              dispatch({ type: 'add-finding', finding })
-            }
-            onQueryChange={(value) =>
-              dispatch({ type: 'set-query', value })
-            }
-            onRemoveFinding={(id) =>
-              dispatch({ type: 'remove-finding', id })
-            }
-            onSeverityChange={(severity) =>
-              dispatch({ type: 'set-severity-filter', severity })
-            }
-            onToggleStatus={(id) =>
-              dispatch({ type: 'toggle-finding-status', id })
-            }
-          />
-        </section>
-      </div>
+      <section className="canvas-grid" aria-label="Design and live comparison">
+        <ComparisonCanvas
+          imageDataUrl={state.design.imageDataUrl}
+          label={state.design.label}
+          side="design"
+          url={state.design.url}
+          viewport={state.viewport}
+          zoom={state.zoom}
+          guidesVisible={state.guidesVisible}
+          onClearImage={() => dispatch({ type: 'clear-image', side: 'design' })}
+          onImageChange={handleImageChange('design')}
+          onLabelChange={(value) =>
+            dispatch({ type: 'set-label', side: 'design', value })
+          }
+          onUrlChange={(value) =>
+            dispatch({ type: 'set-url', side: 'design', value })
+          }
+        />
+        <ComparisonCanvas
+          imageDataUrl={state.live.imageDataUrl}
+          label={state.live.label}
+          side="live"
+          url={state.live.url}
+          viewport={state.viewport}
+          zoom={state.zoom}
+          guidesVisible={state.guidesVisible}
+          onClearImage={() => dispatch({ type: 'clear-image', side: 'live' })}
+          onImageChange={handleImageChange('live')}
+          onLabelChange={(value) =>
+            dispatch({ type: 'set-label', side: 'live', value })
+          }
+          onUrlChange={(value) =>
+            dispatch({ type: 'set-url', side: 'live', value })
+          }
+        />
+      </section>
+
+      <section className="analysis-grid">
+        <SummaryPanel metrics={metrics} />
+        <ComparisonPanel
+          items={visibleItems}
+          selectedCategory={state.selectedCategory}
+          onCategoryChange={(category) =>
+            dispatch({ type: 'set-category', category })
+          }
+        />
+      </section>
     </main>
   )
 }
@@ -306,7 +394,7 @@ function PageHeader({
   onExportJson,
 }: {
   copyState: 'idle' | 'copied' | 'failed'
-  metrics: ReviewMetrics
+  metrics: CompareMetrics
   onCopyReport: () => void
   onExportJson: () => void
 }) {
@@ -314,19 +402,19 @@ function PageHeader({
     <header className="topbar">
       <div className="brand-lockup">
         <div className="brand-mark" aria-hidden="true">
-          <Eye size={22} strokeWidth={2.2} />
+          <Columns3 size={22} strokeWidth={2.2} />
         </div>
         <div>
           <p className="eyebrow">Morkasa</p>
-          <h1>UI Review Tool</h1>
+          <h1>Design Compare Canvas</h1>
         </div>
       </div>
 
       <div className="header-actions">
-        <div className="readiness-pill" aria-label="Current readiness score">
-          <Gauge size={18} aria-hidden="true" />
-          <span>{metrics.readiness}%</span>
-          <strong>{metrics.statusLabel}</strong>
+        <div className="match-pill" aria-label="Current visual match score">
+          <ScanSearch size={18} aria-hidden="true" />
+          <span>{metrics.matchScore}%</span>
+          <strong>{getSourceLabel(metrics.sourceState)}</strong>
         </div>
         <button className="button secondary" type="button" onClick={onCopyReport}>
           <ClipboardCheck size={17} aria-hidden="true" />
@@ -345,86 +433,154 @@ function PageHeader({
   )
 }
 
-function TargetPanel({
-  screenshotAttached,
-  targetUrl,
-  onClearScreenshot,
-  onScreenshotChange,
-  onTargetChange,
+function ComparisonCanvas({
+  guidesVisible,
+  imageDataUrl,
+  label,
+  onClearImage,
+  onImageChange,
+  onLabelChange,
+  onUrlChange,
+  side,
+  url,
+  viewport,
+  zoom,
 }: {
-  screenshotAttached: boolean
-  targetUrl: string
-  onClearScreenshot: () => void
-  onScreenshotChange: (event: ChangeEvent<HTMLInputElement>) => void
-  onTargetChange: (value: string) => void
+  guidesVisible: boolean
+  imageDataUrl: string
+  label: string
+  onClearImage: () => void
+  onImageChange: (event: ChangeEvent<HTMLInputElement>) => void
+  onLabelChange: (value: string) => void
+  onUrlChange: (value: string) => void
+  side: CanvasSide
+  url: string
+  viewport: Viewport
+  zoom: number
 }) {
-  return (
-    <section className="panel">
-      <SectionHeading
-        icon={<ClipboardList size={18} aria-hidden="true" />}
-        kicker="Target"
-        title="Review source"
-      />
-      <label className="field">
-        <span>URL or screen name</span>
-        <input
-          type="text"
-          value={targetUrl}
-          onChange={(event) => onTargetChange(event.target.value)}
-        />
-      </label>
+  const normalizedUrl = normalizeUrl(url)
+  const canEmbedUrl = side === 'live' && normalizedUrl && !imageDataUrl
 
-      <div className="upload-row">
-        <label className="button secondary upload-button">
-          <ImageUp size={17} aria-hidden="true" />
-          Upload screenshot
+  return (
+    <article className="canvas-panel">
+      <div className="canvas-head">
+        <SectionHeading
+          icon={side === 'design' ? <FileImage size={18} /> : <Globe2 size={18} />}
+          kicker={side === 'design' ? 'Design draft' : 'Live build'}
+          title={label}
+        />
+        <span className={`source-badge ${side}`}>{side}</span>
+      </div>
+
+      <div className="source-controls">
+        <label className="field">
+          <span>Name</span>
           <input
-            accept="image/*"
-            className="visually-hidden"
-            type="file"
-            onChange={onScreenshotChange}
+            type="text"
+            value={label}
+            onChange={(event) => onLabelChange(event.target.value)}
           />
         </label>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Clear screenshot"
-          title="Clear screenshot"
-          disabled={!screenshotAttached}
-          onClick={onClearScreenshot}
-        >
-          <XCircle size={18} aria-hidden="true" />
-        </button>
+        <label className="field">
+          <span>{side === 'design' ? 'Figma or file note' : 'Production URL'}</span>
+          <input
+            type="text"
+            value={url}
+            placeholder={side === 'design' ? 'Figma frame, version, file name' : 'https://'}
+            onChange={(event) => onUrlChange(event.target.value)}
+          />
+        </label>
+        <div className="upload-row">
+          <label className="button secondary upload-button">
+            <ImageUp size={17} aria-hidden="true" />
+            Upload image
+            <input
+              accept="image/*"
+              className="visually-hidden"
+              type="file"
+              onChange={onImageChange}
+            />
+          </label>
+          <button
+            className="icon-button"
+            type="button"
+            aria-label={`Clear ${side} image`}
+            title={`Clear ${side} image`}
+            disabled={!imageDataUrl}
+            onClick={onClearImage}
+          >
+            <XCircle size={18} aria-hidden="true" />
+          </button>
+        </div>
       </div>
-    </section>
+
+      <div className={`canvas-stage ${viewport}`}>
+        <div
+          className={`review-frame ${guidesVisible ? 'with-guides' : ''}`}
+          style={{ '--zoom': zoom / 100 } as React.CSSProperties}
+        >
+          {imageDataUrl ? (
+            <img alt={`${label} screenshot`} src={imageDataUrl} />
+          ) : canEmbedUrl ? (
+            <iframe
+              title={`${label} preview`}
+              src={normalizedUrl}
+              sandbox="allow-scripts allow-forms allow-same-origin"
+            />
+          ) : (
+            <CanvasPlaceholder side={side} />
+          )}
+          {guidesVisible && <GuideOverlay />}
+        </div>
+      </div>
+    </article>
   )
 }
 
-function ScorePanel({ metrics }: { metrics: ReviewMetrics }) {
+function CanvasPlaceholder({ side }: { side: CanvasSide }) {
   return (
-    <section className="panel">
-      <SectionHeading
-        icon={<Gauge size={18} aria-hidden="true" />}
-        kicker="Readiness"
-        title="Review score"
-      />
-
-      <div
-        className="score-ring"
-        style={{ '--score': `${metrics.readiness}%` } as React.CSSProperties}
-        aria-label={`Readiness score ${metrics.readiness} percent`}
-      >
-        <strong>{metrics.readiness}</strong>
-        <span>percent</span>
+    <div className={`canvas-placeholder ${side}`} aria-label={`${side} placeholder`}>
+      <div className="placeholder-topline">
+        <span />
+        <span />
+        <span />
       </div>
-
-      <div className="metric-grid">
-        <Metric label="Checklist" value={`${metrics.checkedCount}/${metrics.checklistCount}`} />
-        <Metric label="Open" value={String(metrics.openCount)} tone="warn" />
-        <Metric label="Resolved" value={String(metrics.resolvedCount)} tone="good" />
-        <Metric label="Critical" value={String(metrics.criticalOpen)} tone="danger" />
+      <div className="placeholder-body">
+        <div className="placeholder-sidebar" />
+        <div className="placeholder-content">
+          <span className="placeholder-kicker">
+            {side === 'design' ? 'Spec' : 'Build'}
+          </span>
+          <strong>{side === 'design' ? 'Design surface' : 'Live surface'}</strong>
+          <i />
+          <i />
+          <div className="placeholder-actions">
+            <span />
+            <span />
+          </div>
+        </div>
+        <div className="placeholder-list">
+          {Array.from({ length: 5 }, (_, index) => (
+            <div key={index}>
+              <span />
+              <span />
+              <span />
+            </div>
+          ))}
+        </div>
       </div>
-    </section>
+    </div>
+  )
+}
+
+function GuideOverlay() {
+  return (
+    <div className="guide-overlay" aria-hidden="true">
+      <span className="guide vertical left" />
+      <span className="guide vertical right" />
+      <span className="guide horizontal top" />
+      <span className="guide horizontal bottom" />
+    </div>
   )
 }
 
@@ -435,436 +591,124 @@ function ViewportSwitch({
   viewport: Viewport
   onChange: (viewport: Viewport) => void
 }) {
-  const options: Array<{ id: Viewport; label: string; icon: React.ReactNode }> = [
+  const options: Array<{ id: Viewport; label: string; icon: ReactNode }> = [
     { id: 'desktop', label: 'Desktop', icon: <Monitor size={18} /> },
     { id: 'tablet', label: 'Tablet', icon: <Tablet size={18} /> },
     { id: 'mobile', label: 'Mobile', icon: <Smartphone size={18} /> },
   ]
 
   return (
-    <section className="panel">
-      <SectionHeading
-        icon={<Layers3 size={18} aria-hidden="true" />}
-        kicker="Viewport"
-        title="Review frame"
-      />
-      <div className="segmented-control" role="group" aria-label="Viewport">
-        {options.map((option) => (
-          <button
-            key={option.id}
-            className={option.id === viewport ? 'active' : ''}
-            type="button"
-            aria-pressed={option.id === viewport}
-            onClick={() => onChange(option.id)}
-          >
-            {option.icon}
-            <span>{option.label}</span>
-          </button>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function PreviewPanel({
-  activeCategory,
-  screenshotDataUrl,
-  viewport,
-}: {
-  activeCategory: CategoryId
-  screenshotDataUrl: string
-  viewport: Viewport
-}) {
-  const category = getCategory(activeCategory)
-
-  return (
-    <section className="preview-shell" aria-label="Screenshot review preview">
-      <div className="preview-toolbar">
-        <SectionHeading
-          icon={getCategoryIcon(activeCategory)}
-          kicker={category.label}
-          title="Visual pass"
-        />
-        <span className={`viewport-badge ${viewport}`}>{viewport}</span>
-      </div>
-
-      <div className={`device-frame ${viewport}`}>
-        {screenshotDataUrl ? (
-          <img
-            alt="Uploaded UI screenshot for review"
-            src={screenshotDataUrl}
-          />
-        ) : (
-          <div className="mock-screen" aria-label="Default UI review preview">
-            <div className="mock-bar" />
-            <div className="mock-content">
-              <div className="mock-nav" />
-              <div className="mock-main">
-                <span className="mock-kicker">{category.shortLabel}</span>
-                <strong>Review target</strong>
-                <div className="mock-line wide" />
-                <div className="mock-line" />
-                <div className="mock-actions">
-                  <span />
-                  <span />
-                </div>
-              </div>
-              <div className="mock-table">
-                {Array.from({ length: 5 }, (_, index) => (
-                  <div className="mock-row" key={index}>
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </section>
-  )
-}
-
-function ChecklistPanel({
-  activeCategory,
-  items,
-  selectedItems,
-  onCategoryChange,
-  onToggleItem,
-}: {
-  activeCategory: CategoryId
-  items: typeof checklistItems
-  selectedItems: Record<string, boolean>
-  onCategoryChange: (category: CategoryId) => void
-  onToggleItem: (id: string) => void
-}) {
-  return (
-    <section className="panel">
-      <SectionHeading
-        icon={<CheckCircle2 size={18} aria-hidden="true" />}
-        kicker="Checklist"
-        title="Review criteria"
-      />
-      <CategoryTabs
-        activeCategory={activeCategory}
-        onCategoryChange={onCategoryChange}
-      />
-      <div
-        className="checklist"
-        id="checklist-panel"
-        role="tabpanel"
-        aria-label={`${getCategory(activeCategory).label} checklist`}
-      >
-        {items.map((item) => (
-          <label className="check-row" key={item.id}>
-            <input
-              type="checkbox"
-              checked={selectedItems[item.id]}
-              onChange={() => onToggleItem(item.id)}
-            />
-            <span>{item.label}</span>
-            <em>{item.weight}</em>
-          </label>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function CategoryTabs({
-  activeCategory,
-  onCategoryChange,
-}: {
-  activeCategory: CategoryId
-  onCategoryChange: (category: CategoryId) => void
-}) {
-  const handleKeyDown = (
-    event: KeyboardEvent<HTMLButtonElement>,
-    category: CategoryId,
-  ) => {
-    const currentIndex = reviewCategories.findIndex((item) => item.id === category)
-    const offset =
-      event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
-
-    if (offset === 0) {
-      return
-    }
-
-    event.preventDefault()
-    const nextIndex =
-      (currentIndex + offset + reviewCategories.length) % reviewCategories.length
-    const nextCategory = reviewCategories[nextIndex].id
-    onCategoryChange(nextCategory)
-    window.requestAnimationFrame(() => {
-      document.getElementById(`tab-${nextCategory}`)?.focus()
-    })
-  }
-
-  return (
-    <div className="tab-list" role="tablist" aria-label="Review categories">
-      {reviewCategories.map((category) => (
+    <div className="segmented-control viewport-control" role="group" aria-label="Viewport">
+      {options.map((option) => (
         <button
-          key={category.id}
-          className={category.id === activeCategory ? 'active' : ''}
-          id={`tab-${category.id}`}
-          role="tab"
+          key={option.id}
+          className={option.id === viewport ? 'active' : ''}
           type="button"
-          aria-controls="checklist-panel"
-          aria-selected={category.id === activeCategory}
-          onClick={() => onCategoryChange(category.id)}
-          onKeyDown={(event) => handleKeyDown(event, category.id)}
+          aria-pressed={option.id === viewport}
+          onClick={() => onChange(option.id)}
         >
-          {getCategoryIcon(category.id)}
-          <span>{category.shortLabel}</span>
+          {option.icon}
+          <span>{option.label}</span>
         </button>
       ))}
     </div>
   )
 }
 
-function FindingsPanel({
-  activeCategory,
-  findings,
-  query,
-  severityFilter,
-  viewport,
-  onAddFinding,
-  onQueryChange,
-  onRemoveFinding,
-  onSeverityChange,
-  onToggleStatus,
-}: {
-  activeCategory: CategoryId
-  findings: Finding[]
-  query: string
-  severityFilter: SeverityFilter
-  viewport: Viewport
-  onAddFinding: (finding: Finding) => void
-  onQueryChange: (value: string) => void
-  onRemoveFinding: (id: string) => void
-  onSeverityChange: (severity: SeverityFilter) => void
-  onToggleStatus: (id: string) => void
-}) {
+function SummaryPanel({ metrics }: { metrics: CompareMetrics }) {
   return (
-    <section className="panel findings-panel">
+    <section className="panel summary-panel">
       <SectionHeading
-        icon={<AlertTriangle size={18} aria-hidden="true" />}
-        kicker="Findings"
-        title="Issue queue"
+        icon={<Eye size={18} aria-hidden="true" />}
+        kicker="Snapshot"
+        title="Comparison status"
       />
-
-      <div className="filter-row">
-        <label className="search-field">
-          <Search size={17} aria-hidden="true" />
-          <span className="visually-hidden">Search findings</span>
-          <input
-            type="search"
-            value={query}
-            placeholder="Search findings"
-            onChange={(event) => onQueryChange(event.target.value)}
-          />
-        </label>
-        <label className="select-field">
-          <span className="visually-hidden">Filter by severity</span>
-          <select
-            value={severityFilter}
-            onChange={(event) =>
-              onSeverityChange(event.target.value as SeverityFilter)
-            }
-          >
-            <option value="all">All severities</option>
-            <option value="critical">Critical</option>
-            <option value="major">Major</option>
-            <option value="minor">Minor</option>
-          </select>
-        </label>
+      <div
+        className="score-ring"
+        style={{ '--score': `${metrics.matchScore}%` } as React.CSSProperties}
+        aria-label={`Visual match score ${metrics.matchScore} percent`}
+      >
+        <strong>{metrics.matchScore}</strong>
+        <span>match</span>
       </div>
-
-      <AddFindingForm
-        activeCategory={activeCategory}
-        viewport={viewport}
-        onAddFinding={onAddFinding}
-      />
-
-      <div className="finding-list" aria-live="polite">
-        {findings.length > 0 ? (
-          findings.map((finding) => (
-            <article className="finding-card" key={finding.id}>
-              <div className="finding-main">
-                <div>
-                  <div className="finding-meta">
-                    <span className={`severity ${finding.severity}`}>
-                      {finding.severity}
-                    </span>
-                    <span>{getCategory(finding.category).shortLabel}</span>
-                    <span>{finding.viewport}</span>
-                  </div>
-                  <h3>{finding.title}</h3>
-                  <p>{finding.note}</p>
-                </div>
-                <div className="finding-actions">
-                  <button
-                    className={`status-button ${finding.status}`}
-                    type="button"
-                    onClick={() => onToggleStatus(finding.id)}
-                  >
-                    {finding.status === 'open' ? (
-                      <AlertTriangle size={16} aria-hidden="true" />
-                    ) : (
-                      <CheckCircle2 size={16} aria-hidden="true" />
-                    )}
-                    {finding.status}
-                  </button>
-                  <button
-                    className="icon-button"
-                    type="button"
-                    aria-label={`Remove finding: ${finding.title}`}
-                    title="Remove finding"
-                    onClick={() => onRemoveFinding(finding.id)}
-                  >
-                    <Trash2 size={17} aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-              <footer>
-                <span>{finding.owner}</span>
-                <time dateTime={finding.createdAt}>{finding.createdAt}</time>
-              </footer>
-            </article>
-          ))
-        ) : (
-          <div className="empty-state compact">
-            <strong>No matching findings</strong>
-          </div>
-        )}
+      <div className="metric-grid">
+        <Metric label="Pass" tone="good" value={String(metrics.passCount)} />
+        <Metric label="Review" tone="warn" value={String(metrics.reviewCount)} />
+        <Metric label="Fail" tone="danger" value={String(metrics.failCount)} />
+        <Metric label="Sources" value={getSourceLabel(metrics.sourceState)} />
       </div>
     </section>
   )
 }
 
-function AddFindingForm({
-  activeCategory,
-  viewport,
-  onAddFinding,
+function ComparisonPanel({
+  items,
+  onCategoryChange,
+  selectedCategory,
 }: {
-  activeCategory: CategoryId
-  viewport: Viewport
-  onAddFinding: (finding: Finding) => void
+  items: ComparisonItem[]
+  onCategoryChange: (category: ComparisonCategory | 'all') => void
+  selectedCategory: ComparisonCategory | 'all'
 }) {
-  const [draft, setDraft] = useState<FindingDraft>({
-    title: '',
-    category: activeCategory,
-    severity: 'major',
-    owner: 'Frontend',
-    note: '',
-  })
-  const [error, setError] = useState('')
-
-  const updateDraft = <Key extends keyof FindingDraft>(
-    key: Key,
-    value: FindingDraft[Key],
-  ) => {
-    setDraft((current) => ({ ...current, [key]: value }))
-  }
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const title = draft.title.trim()
-
-    if (title.length < 4) {
-      setError('Use a specific finding title.')
-      return
-    }
-
-    onAddFinding({
-      id: createId(),
-      title,
-      category: draft.category,
-      severity: draft.severity,
-      status: 'open',
-      owner: draft.owner.trim() || 'Unassigned',
-      viewport,
-      note: draft.note.trim() || 'No note added.',
-      createdAt: new Date().toISOString().slice(0, 10),
-    })
-
-    setDraft({
-      title: '',
-      category: activeCategory,
-      severity: 'major',
-      owner: draft.owner,
-      note: '',
-    })
-    setError('')
-  }
+  const categories: Array<{
+    id: ComparisonCategory | 'all'
+    label: string
+    icon: ReactNode
+  }> = [
+    { id: 'all', label: 'All', icon: <SlidersHorizontal size={17} /> },
+    { id: 'typography', label: 'Type', icon: <Type size={17} /> },
+    { id: 'spacing', label: 'Space', icon: <Ruler size={17} /> },
+    { id: 'color', label: 'Color', icon: <Palette size={17} /> },
+    { id: 'layout', label: 'Layout', icon: <Columns3 size={17} /> },
+  ]
 
   return (
-    <form className="add-finding" onSubmit={handleSubmit}>
-      <div className="field-grid">
-        <label className="field wide">
-          <span>Finding title</span>
-          <input
-            type="text"
-            value={draft.title}
-            onChange={(event) => updateDraft('title', event.target.value)}
-          />
-        </label>
-        <label className="field">
-          <span>Category</span>
-          <select
-            value={draft.category}
-            onChange={(event) =>
-              updateDraft('category', event.target.value as CategoryId)
-            }
+    <section className="panel comparison-panel">
+      <SectionHeading
+        icon={<ScanSearch size={18} aria-hidden="true" />}
+        kicker="Diff queue"
+        title="Parameters to compare"
+      />
+      <div className="tab-list compact" role="tablist" aria-label="Comparison categories">
+        {categories.map((category) => (
+          <button
+            key={category.id}
+            className={selectedCategory === category.id ? 'active' : ''}
+            role="tab"
+            type="button"
+            aria-selected={selectedCategory === category.id}
+            onClick={() => onCategoryChange(category.id)}
           >
-            {reviewCategories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>Severity</span>
-          <select
-            value={draft.severity}
-            onChange={(event) =>
-              updateDraft('severity', event.target.value as Severity)
-            }
-          >
-            <option value="critical">Critical</option>
-            <option value="major">Major</option>
-            <option value="minor">Minor</option>
-          </select>
-        </label>
-        <label className="field">
-          <span>Owner</span>
-          <input
-            type="text"
-            value={draft.owner}
-            onChange={(event) => updateDraft('owner', event.target.value)}
-          />
-        </label>
-        <label className="field wide">
-          <span>Note</span>
-          <textarea
-            rows={3}
-            value={draft.note}
-            onChange={(event) => updateDraft('note', event.target.value)}
-          />
-        </label>
+            {category.icon}
+            <span>{category.label}</span>
+          </button>
+        ))}
       </div>
-      <div className="form-footer">
-        <span className="form-error" role="alert">
-          {error}
-        </span>
-        <button className="button primary" type="submit">
-          <Plus size={17} aria-hidden="true" />
-          Add finding
-        </button>
+
+      <div className="diff-table" role="table" aria-label="Comparison differences">
+        <div className="diff-row header" role="row">
+          <span role="columnheader">Parameter</span>
+          <span role="columnheader">Design</span>
+          <span role="columnheader">Live</span>
+          <span role="columnheader">Delta</span>
+          <span role="columnheader">Status</span>
+        </div>
+        {items.map((item) => (
+          <div className="diff-row" role="row" key={item.id}>
+            <span role="cell">
+              <strong>{item.label}</strong>
+              <em>{item.category}</em>
+            </span>
+            <span role="cell">{item.designValue}</span>
+            <span role="cell">{item.liveValue}</span>
+            <span role="cell">{item.delta}</span>
+            <span role="cell">
+              <StatusPill status={item.status} />
+            </span>
+          </div>
+        ))}
       </div>
-    </form>
+    </section>
   )
 }
 
@@ -873,7 +717,7 @@ function SectionHeading({
   kicker,
   title,
 }: {
-  icon: React.ReactNode
+  icon: ReactNode
   kicker: string
   title: string
 }) {
@@ -905,113 +749,92 @@ function Metric({
   )
 }
 
-function getReviewMetrics(
-  checklist: Record<string, boolean>,
-  findings: Finding[],
-): ReviewMetrics {
-  const totalWeight = checklistItems.reduce((sum, item) => sum + item.weight, 0)
-  const checkedWeight = checklistItems.reduce(
-    (sum, item) => sum + (checklist[item.id] ? item.weight : 0),
-    0,
+function StatusPill({ status }: { status: ComparisonStatus }) {
+  const icon =
+    status === 'pass' ? (
+      <CheckCircle2 size={15} aria-hidden="true" />
+    ) : status === 'fail' ? (
+      <XCircle size={15} aria-hidden="true" />
+    ) : (
+      <AlertTriangle size={15} aria-hidden="true" />
+    )
+
+  return (
+    <span className={`status-pill ${status}`}>
+      {icon}
+      {status}
+    </span>
   )
-  const checklistRatio = checkedWeight / totalWeight
-  const openFindings = findings.filter((finding) => finding.status === 'open')
-  const resolvedCount = findings.length - openFindings.length
-  const findingRatio = findings.length === 0 ? 1 : resolvedCount / findings.length
-  const criticalOpen = openFindings.filter(
-    (finding) => finding.severity === 'critical',
-  ).length
-  const majorOpen = openFindings.filter(
-    (finding) => finding.severity === 'major',
-  ).length
+}
 
-  const rawScore =
-    checklistRatio * 72 + findingRatio * 28 - criticalOpen * 8 - majorOpen * 3
-  const readiness = Math.max(0, Math.min(100, Math.round(rawScore)))
+function getCompareMetrics(state: CompareState): CompareMetrics {
+  const passCount = state.items.filter((item) => item.status === 'pass').length
+  const reviewCount = state.items.filter((item) => item.status === 'review').length
+  const failCount = state.items.filter((item) => item.status === 'fail').length
+  const sourceCount = [
+    Boolean(state.design.imageDataUrl || state.design.url.trim()),
+    Boolean(state.live.imageDataUrl || state.live.url.trim()),
+  ].filter(Boolean).length
+  const matchScore = Math.max(0, 100 - reviewCount * 5 - failCount * 14)
 
   return {
-    readiness,
-    checkedCount: Object.values(checklist).filter(Boolean).length,
-    checklistCount: checklistItems.length,
-    openCount: openFindings.length,
-    resolvedCount,
-    criticalOpen,
-    majorOpen,
-    statusLabel:
-      criticalOpen > 0
-        ? 'Needs repair'
-        : readiness >= 90
-          ? 'Ready'
-          : readiness >= 70
-            ? 'Close'
-            : 'At risk',
+    matchScore,
+    passCount,
+    reviewCount,
+    failCount,
+    sourceState:
+      sourceCount === 2 ? 'ready' : sourceCount === 1 ? 'partial' : 'empty',
   }
 }
 
-function buildReport(state: ReviewState, metrics: ReviewMetrics) {
-  return {
-    targetUrl: state.targetUrl,
-    viewport: state.viewport,
-    activeCategory: state.activeCategory,
-    generatedAt: new Date().toISOString(),
-    screenshotAttached: Boolean(state.screenshotDataUrl),
-    metrics,
-    checklist: checklistItems.map((item) => ({
-      ...item,
-      checked: state.checklist[item.id],
-    })),
-    findings: state.findings,
+function normalizeUrl(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return ''
+  }
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed
+  }
+
+  return `https://${trimmed}`
+}
+
+function getSourceLabel(state: CompareMetrics['sourceState']) {
+  switch (state) {
+    case 'ready':
+      return 'Ready'
+    case 'partial':
+      return 'Partial'
+    default:
+      return 'No sources'
   }
 }
 
-function formatMarkdownReport(report: ReturnType<typeof buildReport>) {
-  const openFindings = report.findings.filter((finding) => finding.status === 'open')
-  const checklistDone = report.checklist.filter((item) => item.checked)
+function formatMarkdownReport(report: {
+  generatedAt: string
+  design: { label: string; url: string; hasScreenshot: boolean }
+  live: { label: string; url: string; hasScreenshot: boolean }
+  viewport: Viewport
+  zoom: number
+  metrics: CompareMetrics
+  items: ComparisonItem[]
+}) {
+  const flagged = report.items.filter((item) => item.status !== 'pass')
 
   return [
-    `# UI Review Report`,
-    ``,
-    `Target: ${report.targetUrl}`,
+    '# UI Comparison Report',
+    '',
+    `Generated: ${report.generatedAt}`,
+    `Design: ${report.design.label}${report.design.url ? ` (${report.design.url})` : ''}`,
+    `Live: ${report.live.label}${report.live.url ? ` (${report.live.url})` : ''}`,
     `Viewport: ${report.viewport}`,
-    `Readiness: ${report.metrics.readiness}% (${report.metrics.statusLabel})`,
-    `Checklist: ${checklistDone.length}/${report.checklist.length}`,
-    `Open findings: ${openFindings.length}`,
-    ``,
-    `## Open Findings`,
-    ...openFindings.map(
-      (finding) =>
-        `- [${finding.severity}] ${finding.title} (${getCategory(finding.category).label}, ${finding.owner})`,
+    `Match: ${report.metrics.matchScore}%`,
+    '',
+    '## Flagged Differences',
+    ...flagged.map(
+      (item) =>
+        `- [${item.status}] ${item.label}: design ${item.designValue}, live ${item.liveValue}, delta ${item.delta}`,
     ),
   ].join('\n')
-}
-
-function getCategory(id: CategoryId) {
-  return reviewCategories.find((category) => category.id === id) ?? reviewCategories[0]
-}
-
-function getCategoryIcon(category: CategoryId) {
-  const iconProps = { size: 18, 'aria-hidden': true as const }
-
-  switch (category) {
-    case 'accessibility':
-      return <Accessibility {...iconProps} />
-    case 'layout':
-      return <Layers3 {...iconProps} />
-    case 'interaction':
-      return <MousePointer2 {...iconProps} />
-    case 'content':
-      return <ClipboardList {...iconProps} />
-    case 'performance':
-      return <Zap {...iconProps} />
-    default:
-      return <CheckCircle2 {...iconProps} />
-  }
-}
-
-function createId() {
-  if ('randomUUID' in crypto) {
-    return crypto.randomUUID()
-  }
-
-  return `finding-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
