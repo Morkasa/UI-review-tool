@@ -11,6 +11,13 @@ A focused React app for comparing a design draft against a live build.
 - Shared zoom and guide overlays for visual alignment.
 - Comparison queue for typography, spacing, color, and layout parameters.
 - JSON export and Markdown report copy.
+- Dark Framer-like product UI using the Morkasa brand blue `#002FA7`.
+
+## Design System
+
+- `DESIGN.md` documents the dark canvas direction and component rules.
+- `design-tokens.json` is the source of truth for colors, spacing, radius, typography, and shadows.
+- `design-preview.html` is a self-contained token preview page.
 
 ## Development
 
