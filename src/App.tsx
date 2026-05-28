@@ -3,7 +3,6 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Columns3,
-  Copy,
   Download,
   Eye,
   FileImage,
@@ -31,9 +30,10 @@ import type { Viewport } from './types'
 type CanvasSide = 'design' | 'live'
 type ComparisonCategory = 'typography' | 'spacing' | 'color' | 'layout'
 type ComparisonStatus = 'pass' | 'review' | 'fail'
+type Locale = 'zh' | 'en'
 
 interface SourceState {
-  label: string
+  labels: Record<Locale, string>
   url: string
   imageDataUrl: string
 }
@@ -41,7 +41,7 @@ interface SourceState {
 interface ComparisonItem {
   id: string
   category: ComparisonCategory
-  label: string
+  labels: Record<Locale, string>
   designValue: string
   liveValue: string
   delta: string
@@ -59,7 +59,7 @@ interface CompareState {
 }
 
 type CompareAction =
-  | { type: 'set-label'; side: CanvasSide; value: string }
+  | { type: 'set-label'; side: CanvasSide; locale: Locale; value: string }
   | { type: 'set-url'; side: CanvasSide; value: string }
   | { type: 'set-image'; side: CanvasSide; dataUrl: string }
   | { type: 'clear-image'; side: CanvasSide }
@@ -80,7 +80,7 @@ const comparisonItems: ComparisonItem[] = [
   {
     id: 'font-heading',
     category: 'typography',
-    label: 'Primary heading',
+    labels: { zh: '主标题', en: 'Primary heading' },
     designValue: '32px / 700 / -',
     liveValue: '30px / 700 / -',
     delta: '-2px',
@@ -89,7 +89,7 @@ const comparisonItems: ComparisonItem[] = [
   {
     id: 'font-body',
     category: 'typography',
-    label: 'Body text',
+    labels: { zh: '正文文字', en: 'Body text' },
     designValue: '16px / 400 / 24px',
     liveValue: '16px / 400 / 24px',
     delta: '0',
@@ -98,7 +98,7 @@ const comparisonItems: ComparisonItem[] = [
   {
     id: 'gap-section',
     category: 'spacing',
-    label: 'Section gap',
+    labels: { zh: '区块间距', en: 'Section gap' },
     designValue: '32px',
     liveValue: '24px',
     delta: '-8px',
@@ -107,7 +107,7 @@ const comparisonItems: ComparisonItem[] = [
   {
     id: 'padding-card',
     category: 'spacing',
-    label: 'Panel padding',
+    labels: { zh: '面板内边距', en: 'Panel padding' },
     designValue: '20px',
     liveValue: '18px',
     delta: '-2px',
@@ -116,7 +116,7 @@ const comparisonItems: ComparisonItem[] = [
   {
     id: 'color-primary',
     category: 'color',
-    label: 'Primary action',
+    labels: { zh: '主操作色', en: 'Primary action' },
     designValue: '#002FA7',
     liveValue: '#0838B8',
     delta: 'Delta E 3.2',
@@ -125,7 +125,7 @@ const comparisonItems: ComparisonItem[] = [
   {
     id: 'color-muted',
     category: 'color',
-    label: 'Muted text',
+    labels: { zh: '弱化文字色', en: 'Muted text' },
     designValue: '#A8AFBF',
     liveValue: '#8E96A8',
     delta: 'Delta E 7.1',
@@ -134,7 +134,7 @@ const comparisonItems: ComparisonItem[] = [
   {
     id: 'width-main',
     category: 'layout',
-    label: 'Main content width',
+    labels: { zh: '主内容宽度', en: 'Main content width' },
     designValue: '760px',
     liveValue: '744px',
     delta: '-16px',
@@ -143,7 +143,7 @@ const comparisonItems: ComparisonItem[] = [
   {
     id: 'radius-panel',
     category: 'layout',
-    label: 'Panel radius',
+    labels: { zh: '面板圆角', en: 'Panel radius' },
     designValue: '8px',
     liveValue: '8px',
     delta: '0',
@@ -153,12 +153,12 @@ const comparisonItems: ComparisonItem[] = [
 
 const initialState: CompareState = {
   design: {
-    label: 'Design draft',
+    labels: { zh: '设计稿', en: 'Design draft' },
     url: '',
     imageDataUrl: '',
   },
   live: {
-    label: 'Live build',
+    labels: { zh: '线上稿', en: 'Live build' },
     url: '',
     imageDataUrl: '',
   },
@@ -169,6 +169,133 @@ const initialState: CompareState = {
   items: comparisonItems,
 }
 
+const copy = {
+  zh: {
+    appTitle: '对稿画布',
+    scoreLabel: '当前视觉匹配度',
+    copied: '已复制',
+    copyFailed: '复制失败',
+    copyReport: '复制报告',
+    exportJson: '导出 JSON',
+    controlsAria: '比对控制',
+    canvasAria: '设计稿和线上稿比对',
+    viewportAria: '视口',
+    desktop: '桌面',
+    tablet: '平板',
+    mobile: '手机',
+    zoom: '缩放',
+    guides: '参考线',
+    designKicker: '设计稿',
+    liveKicker: '线上稿',
+    designBadge: '设计',
+    liveBadge: '线上',
+    name: '名称',
+    designNote: 'Figma 或文件备注',
+    liveUrl: '线上地址',
+    designPlaceholder: 'Figma 页面、版本或文件名',
+    uploadImage: '上传图片',
+    clearImage: '清除图片',
+    screenshot: '截图',
+    preview: '预览',
+    spec: '规范',
+    build: '实现',
+    designSurface: '设计稿画面',
+    liveSurface: '线上画面',
+    summaryKicker: '概览',
+    summaryTitle: '比对状态',
+    scoreAria: '视觉匹配度',
+    match: '匹配度',
+    pass: '通过',
+    review: '待复查',
+    fail: '不一致',
+    sources: '素材',
+    sourceReady: '已就绪',
+    sourcePartial: '缺一侧',
+    sourceEmpty: '未放入',
+    diffKicker: '差异队列',
+    diffTitle: '待比对参数',
+    categoriesAria: '比对分类',
+    differencesAria: '比对差异',
+    all: '全部',
+    typography: '字体',
+    spacing: '间距',
+    color: '颜色',
+    layout: '布局',
+    parameter: '参数',
+    design: '设计稿',
+    live: '线上稿',
+    delta: '差异',
+    status: '状态',
+    reportTitle: '界面对稿报告',
+    generated: '生成时间',
+    viewport: '视口',
+    matchReport: '匹配度',
+    flagged: '需要复查的问题',
+  },
+  en: {
+    appTitle: 'Design Compare Canvas',
+    scoreLabel: 'Current visual match score',
+    copied: 'Copied',
+    copyFailed: 'Copy failed',
+    copyReport: 'Copy report',
+    exportJson: 'Export JSON',
+    controlsAria: 'Comparison controls',
+    canvasAria: 'Design and live comparison',
+    viewportAria: 'Viewport',
+    desktop: 'Desktop',
+    tablet: 'Tablet',
+    mobile: 'Mobile',
+    zoom: 'Zoom',
+    guides: 'Guides',
+    designKicker: 'Design draft',
+    liveKicker: 'Live build',
+    designBadge: 'Design',
+    liveBadge: 'Live',
+    name: 'Name',
+    designNote: 'Figma or file note',
+    liveUrl: 'Production URL',
+    designPlaceholder: 'Figma frame, version, file name',
+    uploadImage: 'Upload image',
+    clearImage: 'Clear image',
+    screenshot: 'screenshot',
+    preview: 'preview',
+    spec: 'Spec',
+    build: 'Build',
+    designSurface: 'Design surface',
+    liveSurface: 'Live surface',
+    summaryKicker: 'Snapshot',
+    summaryTitle: 'Comparison status',
+    scoreAria: 'Visual match score',
+    match: 'match',
+    pass: 'Pass',
+    review: 'Review',
+    fail: 'Fail',
+    sources: 'Sources',
+    sourceReady: 'Ready',
+    sourcePartial: 'Partial',
+    sourceEmpty: 'No sources',
+    diffKicker: 'Diff queue',
+    diffTitle: 'Parameters to compare',
+    categoriesAria: 'Comparison categories',
+    differencesAria: 'Comparison differences',
+    all: 'All',
+    typography: 'Type',
+    spacing: 'Space',
+    color: 'Color',
+    layout: 'Layout',
+    parameter: 'Parameter',
+    design: 'Design',
+    live: 'Live',
+    delta: 'Delta',
+    status: 'Status',
+    reportTitle: 'UI Comparison Report',
+    generated: 'Generated',
+    viewport: 'Viewport',
+    matchReport: 'Match',
+    flagged: 'Flagged Differences',
+  },
+} as const
+
 function compareReducer(state: CompareState, action: CompareAction): CompareState {
   switch (action.type) {
     case 'set-label':
@@ -176,7 +303,10 @@ function compareReducer(state: CompareState, action: CompareAction): CompareStat
         ...state,
         [action.side]: {
           ...state[action.side],
-          label: action.value,
+          labels: {
+            ...state[action.side].labels,
+            [action.locale]: action.value,
+          },
         },
       }
     case 'set-url':
@@ -221,6 +351,8 @@ export function App() {
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>(
     'idle',
   )
+  const [locale, setLocale] = useState<Locale>('zh')
+  const t = copy[locale]
 
   const metrics = useMemo(() => getCompareMetrics(state), [state])
   const visibleItems = useMemo(
@@ -236,21 +368,22 @@ export function App() {
     () => ({
       generatedAt: new Date().toISOString(),
       design: {
-        label: state.design.label,
+        label: state.design.labels[locale],
         url: state.design.url,
         hasScreenshot: Boolean(state.design.imageDataUrl),
       },
       live: {
-        label: state.live.label,
+        label: state.live.labels[locale],
         url: state.live.url,
         hasScreenshot: Boolean(state.live.imageDataUrl),
       },
+      locale,
       viewport: state.viewport,
       zoom: state.zoom,
       metrics,
       items: state.items,
     }),
-    [metrics, state],
+    [locale, metrics, state],
   )
 
   const handleImageChange =
@@ -274,7 +407,7 @@ export function App() {
 
   const handleCopyReport = async () => {
     try {
-      await navigator.clipboard.writeText(formatMarkdownReport(report))
+      await navigator.clipboard.writeText(formatMarkdownReport(report, locale))
       setCopyState('copied')
       window.setTimeout(() => setCopyState('idle'), 1800)
     } catch {
@@ -299,20 +432,23 @@ export function App() {
     <main className="app compare-app">
       <PageHeader
         copyState={copyState}
+        locale={locale}
         metrics={metrics}
+        onLocaleChange={setLocale}
         onCopyReport={handleCopyReport}
         onExportJson={handleExportJson}
       />
 
-      <section className="compare-toolbar" aria-label="Comparison controls">
+      <section className="compare-toolbar" aria-label={t.controlsAria}>
         <ViewportSwitch
+          locale={locale}
           viewport={state.viewport}
           onChange={(viewport) =>
             dispatch({ type: 'set-viewport', viewport })
           }
         />
         <label className="range-field">
-          <span>Zoom</span>
+          <span>{t.zoom}</span>
           <input
             type="range"
             min="56"
@@ -332,14 +468,15 @@ export function App() {
           onClick={() => dispatch({ type: 'toggle-guides' })}
         >
           <Ruler size={17} aria-hidden="true" />
-          Guides
+          {t.guides}
         </button>
       </section>
 
-      <section className="canvas-grid" aria-label="Design and live comparison">
+      <section className="canvas-grid" aria-label={t.canvasAria}>
         <ComparisonCanvas
           imageDataUrl={state.design.imageDataUrl}
-          label={state.design.label}
+          label={state.design.labels[locale]}
+          locale={locale}
           side="design"
           url={state.design.url}
           viewport={state.viewport}
@@ -348,7 +485,7 @@ export function App() {
           onClearImage={() => dispatch({ type: 'clear-image', side: 'design' })}
           onImageChange={handleImageChange('design')}
           onLabelChange={(value) =>
-            dispatch({ type: 'set-label', side: 'design', value })
+            dispatch({ type: 'set-label', side: 'design', locale, value })
           }
           onUrlChange={(value) =>
             dispatch({ type: 'set-url', side: 'design', value })
@@ -356,7 +493,8 @@ export function App() {
         />
         <ComparisonCanvas
           imageDataUrl={state.live.imageDataUrl}
-          label={state.live.label}
+          label={state.live.labels[locale]}
+          locale={locale}
           side="live"
           url={state.live.url}
           viewport={state.viewport}
@@ -365,7 +503,7 @@ export function App() {
           onClearImage={() => dispatch({ type: 'clear-image', side: 'live' })}
           onImageChange={handleImageChange('live')}
           onLabelChange={(value) =>
-            dispatch({ type: 'set-label', side: 'live', value })
+            dispatch({ type: 'set-label', side: 'live', locale, value })
           }
           onUrlChange={(value) =>
             dispatch({ type: 'set-url', side: 'live', value })
@@ -374,9 +512,10 @@ export function App() {
       </section>
 
       <section className="analysis-grid">
-        <SummaryPanel metrics={metrics} />
+        <SummaryPanel locale={locale} metrics={metrics} />
         <ComparisonPanel
           items={visibleItems}
+          locale={locale}
           selectedCategory={state.selectedCategory}
           onCategoryChange={(category) =>
             dispatch({ type: 'set-category', category })
@@ -389,15 +528,21 @@ export function App() {
 
 function PageHeader({
   copyState,
+  locale,
   metrics,
+  onLocaleChange,
   onCopyReport,
   onExportJson,
 }: {
   copyState: 'idle' | 'copied' | 'failed'
+  locale: Locale
   metrics: CompareMetrics
+  onLocaleChange: (locale: Locale) => void
   onCopyReport: () => void
   onExportJson: () => void
 }) {
+  const t = copy[locale]
+
   return (
     <header className="topbar">
       <div className="brand-lockup">
@@ -406,27 +551,45 @@ function PageHeader({
         </div>
         <div>
           <p className="eyebrow">Morkasa</p>
-          <h1>Design Compare Canvas</h1>
+          <h1>{t.appTitle}</h1>
         </div>
       </div>
 
       <div className="header-actions">
-        <div className="match-pill" aria-label="Current visual match score">
+        <div className="match-pill" aria-label={t.scoreLabel}>
           <ScanSearch size={18} aria-hidden="true" />
           <span>{metrics.matchScore}%</span>
-          <strong>{getSourceLabel(metrics.sourceState)}</strong>
+          <strong>{getSourceLabel(metrics.sourceState, locale)}</strong>
+        </div>
+        <div className="segmented-control locale-switch" role="group" aria-label="Language">
+          <button
+            className={locale === 'zh' ? 'active' : ''}
+            type="button"
+            aria-pressed={locale === 'zh'}
+            onClick={() => onLocaleChange('zh')}
+          >
+            中文
+          </button>
+          <button
+            className={locale === 'en' ? 'active' : ''}
+            type="button"
+            aria-pressed={locale === 'en'}
+            onClick={() => onLocaleChange('en')}
+          >
+            EN
+          </button>
         </div>
         <button className="button secondary" type="button" onClick={onCopyReport}>
           <ClipboardCheck size={17} aria-hidden="true" />
           {copyState === 'copied'
-            ? 'Copied'
+            ? t.copied
             : copyState === 'failed'
-              ? 'Copy failed'
-              : 'Copy report'}
+              ? t.copyFailed
+              : t.copyReport}
         </button>
         <button className="button primary" type="button" onClick={onExportJson}>
           <Download size={17} aria-hidden="true" />
-          Export JSON
+          {t.exportJson}
         </button>
       </div>
     </header>
@@ -437,6 +600,7 @@ function ComparisonCanvas({
   guidesVisible,
   imageDataUrl,
   label,
+  locale,
   onClearImage,
   onImageChange,
   onLabelChange,
@@ -449,6 +613,7 @@ function ComparisonCanvas({
   guidesVisible: boolean
   imageDataUrl: string
   label: string
+  locale: Locale
   onClearImage: () => void
   onImageChange: (event: ChangeEvent<HTMLInputElement>) => void
   onLabelChange: (value: string) => void
@@ -460,21 +625,24 @@ function ComparisonCanvas({
 }) {
   const normalizedUrl = normalizeUrl(url)
   const canEmbedUrl = side === 'live' && normalizedUrl && !imageDataUrl
+  const t = copy[locale]
+  const sideLabel = side === 'design' ? t.designKicker : t.liveKicker
+  const badgeLabel = side === 'design' ? t.designBadge : t.liveBadge
 
   return (
     <article className="canvas-panel">
       <div className="canvas-head">
         <SectionHeading
           icon={side === 'design' ? <FileImage size={18} /> : <Globe2 size={18} />}
-          kicker={side === 'design' ? 'Design draft' : 'Live build'}
+          kicker={sideLabel}
           title={label}
         />
-        <span className={`source-badge ${side}`}>{side}</span>
+        <span className={`source-badge ${side}`}>{badgeLabel}</span>
       </div>
 
       <div className="source-controls">
         <label className="field">
-          <span>Name</span>
+          <span>{t.name}</span>
           <input
             type="text"
             value={label}
@@ -482,18 +650,18 @@ function ComparisonCanvas({
           />
         </label>
         <label className="field">
-          <span>{side === 'design' ? 'Figma or file note' : 'Production URL'}</span>
+          <span>{side === 'design' ? t.designNote : t.liveUrl}</span>
           <input
             type="text"
             value={url}
-            placeholder={side === 'design' ? 'Figma frame, version, file name' : 'https://'}
+            placeholder={side === 'design' ? t.designPlaceholder : 'https://'}
             onChange={(event) => onUrlChange(event.target.value)}
           />
         </label>
         <div className="upload-row">
           <label className="button secondary upload-button">
             <ImageUp size={17} aria-hidden="true" />
-            Upload image
+            {t.uploadImage}
             <input
               accept="image/*"
               className="visually-hidden"
@@ -504,8 +672,8 @@ function ComparisonCanvas({
           <button
             className="icon-button"
             type="button"
-            aria-label={`Clear ${side} image`}
-            title={`Clear ${side} image`}
+            aria-label={`${t.clearImage}: ${sideLabel}`}
+            title={`${t.clearImage}: ${sideLabel}`}
             disabled={!imageDataUrl}
             onClick={onClearImage}
           >
@@ -520,15 +688,15 @@ function ComparisonCanvas({
           style={{ '--zoom': zoom / 100 } as React.CSSProperties}
         >
           {imageDataUrl ? (
-            <img alt={`${label} screenshot`} src={imageDataUrl} />
+            <img alt={`${label} ${t.screenshot}`} src={imageDataUrl} />
           ) : canEmbedUrl ? (
             <iframe
-              title={`${label} preview`}
+              title={`${label} ${t.preview}`}
               src={normalizedUrl}
               sandbox="allow-scripts allow-forms allow-same-origin"
             />
           ) : (
-            <CanvasPlaceholder side={side} />
+            <CanvasPlaceholder locale={locale} side={side} />
           )}
           {guidesVisible && <GuideOverlay />}
         </div>
@@ -537,9 +705,11 @@ function ComparisonCanvas({
   )
 }
 
-function CanvasPlaceholder({ side }: { side: CanvasSide }) {
+function CanvasPlaceholder({ locale, side }: { locale: Locale; side: CanvasSide }) {
+  const t = copy[locale]
+
   return (
-    <div className={`canvas-placeholder ${side}`} aria-label={`${side} placeholder`}>
+    <div className={`canvas-placeholder ${side}`} aria-label={side === 'design' ? t.designSurface : t.liveSurface}>
       <div className="placeholder-topline">
         <span />
         <span />
@@ -549,9 +719,9 @@ function CanvasPlaceholder({ side }: { side: CanvasSide }) {
         <div className="placeholder-sidebar" />
         <div className="placeholder-content">
           <span className="placeholder-kicker">
-            {side === 'design' ? 'Spec' : 'Build'}
+            {side === 'design' ? t.spec : t.build}
           </span>
-          <strong>{side === 'design' ? 'Design surface' : 'Live surface'}</strong>
+          <strong>{side === 'design' ? t.designSurface : t.liveSurface}</strong>
           <i />
           <i />
           <div className="placeholder-actions">
@@ -585,20 +755,23 @@ function GuideOverlay() {
 }
 
 function ViewportSwitch({
+  locale,
   viewport,
   onChange,
 }: {
+  locale: Locale
   viewport: Viewport
   onChange: (viewport: Viewport) => void
 }) {
+  const t = copy[locale]
   const options: Array<{ id: Viewport; label: string; icon: ReactNode }> = [
-    { id: 'desktop', label: 'Desktop', icon: <Monitor size={18} /> },
-    { id: 'tablet', label: 'Tablet', icon: <Tablet size={18} /> },
-    { id: 'mobile', label: 'Mobile', icon: <Smartphone size={18} /> },
+    { id: 'desktop', label: t.desktop, icon: <Monitor size={18} /> },
+    { id: 'tablet', label: t.tablet, icon: <Tablet size={18} /> },
+    { id: 'mobile', label: t.mobile, icon: <Smartphone size={18} /> },
   ]
 
   return (
-    <div className="segmented-control viewport-control" role="group" aria-label="Viewport">
+    <div className="segmented-control viewport-control" role="group" aria-label={t.viewportAria}>
       {options.map((option) => (
         <button
           key={option.id}
@@ -615,27 +788,29 @@ function ViewportSwitch({
   )
 }
 
-function SummaryPanel({ metrics }: { metrics: CompareMetrics }) {
+function SummaryPanel({ locale, metrics }: { locale: Locale; metrics: CompareMetrics }) {
+  const t = copy[locale]
+
   return (
     <section className="panel summary-panel">
       <SectionHeading
         icon={<Eye size={18} aria-hidden="true" />}
-        kicker="Snapshot"
-        title="Comparison status"
+        kicker={t.summaryKicker}
+        title={t.summaryTitle}
       />
       <div
         className="score-ring"
         style={{ '--score': `${metrics.matchScore}%` } as React.CSSProperties}
-        aria-label={`Visual match score ${metrics.matchScore} percent`}
+        aria-label={`${t.scoreAria} ${metrics.matchScore}%`}
       >
         <strong>{metrics.matchScore}</strong>
-        <span>match</span>
+        <span>{t.match}</span>
       </div>
       <div className="metric-grid">
-        <Metric label="Pass" tone="good" value={String(metrics.passCount)} />
-        <Metric label="Review" tone="warn" value={String(metrics.reviewCount)} />
-        <Metric label="Fail" tone="danger" value={String(metrics.failCount)} />
-        <Metric label="Sources" value={getSourceLabel(metrics.sourceState)} />
+        <Metric label={t.pass} tone="good" value={String(metrics.passCount)} />
+        <Metric label={t.review} tone="warn" value={String(metrics.reviewCount)} />
+        <Metric label={t.fail} tone="danger" value={String(metrics.failCount)} />
+        <Metric label={t.sources} value={getSourceLabel(metrics.sourceState, locale)} />
       </div>
     </section>
   )
@@ -643,33 +818,36 @@ function SummaryPanel({ metrics }: { metrics: CompareMetrics }) {
 
 function ComparisonPanel({
   items,
+  locale,
   onCategoryChange,
   selectedCategory,
 }: {
   items: ComparisonItem[]
+  locale: Locale
   onCategoryChange: (category: ComparisonCategory | 'all') => void
   selectedCategory: ComparisonCategory | 'all'
 }) {
+  const t = copy[locale]
   const categories: Array<{
     id: ComparisonCategory | 'all'
     label: string
     icon: ReactNode
   }> = [
-    { id: 'all', label: 'All', icon: <SlidersHorizontal size={17} /> },
-    { id: 'typography', label: 'Type', icon: <Type size={17} /> },
-    { id: 'spacing', label: 'Space', icon: <Ruler size={17} /> },
-    { id: 'color', label: 'Color', icon: <Palette size={17} /> },
-    { id: 'layout', label: 'Layout', icon: <Columns3 size={17} /> },
+    { id: 'all', label: t.all, icon: <SlidersHorizontal size={17} /> },
+    { id: 'typography', label: t.typography, icon: <Type size={17} /> },
+    { id: 'spacing', label: t.spacing, icon: <Ruler size={17} /> },
+    { id: 'color', label: t.color, icon: <Palette size={17} /> },
+    { id: 'layout', label: t.layout, icon: <Columns3 size={17} /> },
   ]
 
   return (
     <section className="panel comparison-panel">
       <SectionHeading
         icon={<ScanSearch size={18} aria-hidden="true" />}
-        kicker="Diff queue"
-        title="Parameters to compare"
+        kicker={t.diffKicker}
+        title={t.diffTitle}
       />
-      <div className="tab-list compact" role="tablist" aria-label="Comparison categories">
+      <div className="tab-list compact" role="tablist" aria-label={t.categoriesAria}>
         {categories.map((category) => (
           <button
             key={category.id}
@@ -685,25 +863,25 @@ function ComparisonPanel({
         ))}
       </div>
 
-      <div className="diff-table" role="table" aria-label="Comparison differences">
+      <div className="diff-table" role="table" aria-label={t.differencesAria}>
         <div className="diff-row header" role="row">
-          <span role="columnheader">Parameter</span>
-          <span role="columnheader">Design</span>
-          <span role="columnheader">Live</span>
-          <span role="columnheader">Delta</span>
-          <span role="columnheader">Status</span>
+          <span role="columnheader">{t.parameter}</span>
+          <span role="columnheader">{t.design}</span>
+          <span role="columnheader">{t.live}</span>
+          <span role="columnheader">{t.delta}</span>
+          <span role="columnheader">{t.status}</span>
         </div>
         {items.map((item) => (
           <div className="diff-row" role="row" key={item.id}>
             <span role="cell">
-              <strong>{item.label}</strong>
-              <em>{item.category}</em>
+              <strong>{item.labels[locale]}</strong>
+              <em>{getCategoryLabel(item.category, locale)}</em>
             </span>
-            <span role="cell">{item.designValue}</span>
-            <span role="cell">{item.liveValue}</span>
-            <span role="cell">{item.delta}</span>
-            <span role="cell">
-              <StatusPill status={item.status} />
+            <span role="cell" data-label={t.design}>{item.designValue}</span>
+            <span role="cell" data-label={t.live}>{item.liveValue}</span>
+            <span role="cell" data-label={t.delta}>{item.delta}</span>
+            <span role="cell" data-label={t.status}>
+              <StatusPill locale={locale} status={item.status} />
             </span>
           </div>
         ))}
@@ -749,7 +927,7 @@ function Metric({
   )
 }
 
-function StatusPill({ status }: { status: ComparisonStatus }) {
+function StatusPill({ locale, status }: { locale: Locale; status: ComparisonStatus }) {
   const icon =
     status === 'pass' ? (
       <CheckCircle2 size={15} aria-hidden="true" />
@@ -762,7 +940,7 @@ function StatusPill({ status }: { status: ComparisonStatus }) {
   return (
     <span className={`status-pill ${status}`}>
       {icon}
-      {status}
+      {getStatusLabel(status, locale)}
     </span>
   )
 }
@@ -800,41 +978,56 @@ function normalizeUrl(value: string) {
   return `https://${trimmed}`
 }
 
-function getSourceLabel(state: CompareMetrics['sourceState']) {
+function getSourceLabel(state: CompareMetrics['sourceState'], locale: Locale) {
+  const t = copy[locale]
   switch (state) {
     case 'ready':
-      return 'Ready'
+      return t.sourceReady
     case 'partial':
-      return 'Partial'
+      return t.sourcePartial
     default:
-      return 'No sources'
+      return t.sourceEmpty
   }
+}
+
+function getCategoryLabel(category: ComparisonCategory, locale: Locale) {
+  return copy[locale][category]
+}
+
+function getStatusLabel(status: ComparisonStatus, locale: Locale) {
+  return copy[locale][status]
+}
+
+function getViewportLabel(viewport: Viewport, locale: Locale) {
+  return copy[locale][viewport]
 }
 
 function formatMarkdownReport(report: {
   generatedAt: string
   design: { label: string; url: string; hasScreenshot: boolean }
   live: { label: string; url: string; hasScreenshot: boolean }
+  locale: Locale
   viewport: Viewport
   zoom: number
   metrics: CompareMetrics
   items: ComparisonItem[]
-}) {
+}, locale: Locale) {
+  const t = copy[locale]
   const flagged = report.items.filter((item) => item.status !== 'pass')
 
   return [
-    '# UI Comparison Report',
+    `# ${t.reportTitle}`,
     '',
-    `Generated: ${report.generatedAt}`,
-    `Design: ${report.design.label}${report.design.url ? ` (${report.design.url})` : ''}`,
-    `Live: ${report.live.label}${report.live.url ? ` (${report.live.url})` : ''}`,
-    `Viewport: ${report.viewport}`,
-    `Match: ${report.metrics.matchScore}%`,
+    `${t.generated}: ${report.generatedAt}`,
+    `${t.design}: ${report.design.label}${report.design.url ? ` (${report.design.url})` : ''}`,
+    `${t.live}: ${report.live.label}${report.live.url ? ` (${report.live.url})` : ''}`,
+    `${t.viewport}: ${getViewportLabel(report.viewport, locale)}`,
+    `${t.matchReport}: ${report.metrics.matchScore}%`,
     '',
-    '## Flagged Differences',
+    `## ${t.flagged}`,
     ...flagged.map(
       (item) =>
-        `- [${item.status}] ${item.label}: design ${item.designValue}, live ${item.liveValue}, delta ${item.delta}`,
+        `- [${getStatusLabel(item.status, locale)}] ${item.labels[locale]}: ${t.design} ${item.designValue}, ${t.live} ${item.liveValue}, ${t.delta} ${item.delta}`,
     ),
   ].join('\n')
 }

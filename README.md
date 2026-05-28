@@ -1,34 +1,34 @@
-# Design Compare Canvas
+# Morkasa 对稿画布
 
-A focused React app for comparing a design draft against a live build.
+一个用于比对设计稿和线上稿的 React 工具。界面默认中文，右上角支持 `中文 / EN` 切换。
 
-## Features
+## 功能
 
-- Side-by-side design and live canvases.
-- Screenshot upload for both sides.
-- Live URL preview for the production side when the target allows embedding.
-- Desktop, tablet, and mobile viewport frames.
-- Shared zoom and guide overlays for visual alignment.
-- Comparison queue for typography, spacing, color, and layout parameters.
-- JSON export and Markdown report copy.
-- Dark Framer-like product UI using the Morkasa brand blue `#002FA7`.
+- 左右双画布：左侧放设计稿，右侧放线上稿。
+- 两侧都支持上传截图。
+- 线上稿支持输入 URL 预览，前提是目标站点允许被 iframe 嵌入。
+- 支持桌面、平板、手机三种视口。
+- 支持共享缩放和对齐参考线。
+- 差异队列覆盖字体、间距、颜色、布局参数。
+- 支持复制 Markdown 报告和导出 JSON。
+- 暗色工具界面，主色使用 Morkasa 品牌蓝 `#002FA7`。
 
-## Design System
+## 设计系统
 
-- `DESIGN.md` documents the dark canvas direction and component rules.
-- `design-tokens.json` is the source of truth for colors, spacing, radius, typography, and shadows.
-- `design-preview.html` is a self-contained token preview page.
+- `DESIGN.md` 记录暗色画布方向和组件规则。
+- `design-tokens.json` 是颜色、间距、圆角、字体和阴影的 token 来源。
+- `design-preview.html` 是独立的 token 预览页。
 
-## Development
+## 本地开发
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5173/`.
+打开 `http://127.0.0.1:5173/`。
 
-## Verification
+## 验证
 
 ```bash
 npm run build

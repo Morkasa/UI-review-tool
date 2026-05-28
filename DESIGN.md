@@ -1,19 +1,19 @@
-# Morkasa Dark Canvas Design System
+# Morkasa 暗色对稿画布设计系统
 
-This project uses a dark, tool-first interface inspired by Framer's canvas UI: black workspace, compact panels, restrained dividers, visible controls, and a bottom/tool-surface feeling without decorative marketing layout.
+这个项目采用暗色、工具优先的界面方向：黑色工作区、紧凑面板、克制分割线、清晰控件和强画布感。整体参考 Framer 类产品的工作台气质，但主色和品牌感使用 Morkasa 的蓝色。
 
-## Design Direction
+## 设计方向
 
-- Primary brand color: `#002FA7`.
-- Dark-first workspace: `#050507` background, `#0D0F14` panels, and subtle 1px dividers.
-- Brand blue appears as the action fill, active state, focus ring, guide glow, and design-side accent.
-- Text does not use raw brand blue on black. It uses `#F7F8FF`, `#A8AFBF`, and `#71798A` for accessible hierarchy.
-- Border radius is capped at `8px` for a compact product-tool feel.
-- No decorative blobs, hero sections, or broad gradients. Depth comes from borders, black surfaces, and small blue glows.
+- 品牌主色：`#002FA7`。
+- 暗色工作区：背景 `#050507`，面板 `#0D0F14`，分割线保持 1px。
+- 品牌蓝用于主按钮、选中态、焦点环、参考线高亮和设计侧重点。
+- 正文不直接用品牌蓝压在黑底上，而是使用 `#F7F8FF`、`#A8AFBF`、`#71798A` 建立层级。
+- 圆角控制在 `8px`，保持工具产品的紧凑感。
+- 不使用装饰性光球、营销大首屏、宽泛渐变或玻璃卡片。
 
-## Tokens
+## Token
 
-The canonical token source is `design-tokens.json`. CSS variables in `src/styles.css` mirror those values:
+`design-tokens.json` 是 token 源文件。`src/styles.css` 中的 CSS 变量与它保持一致：
 
 - `--brand-blue`: `#002FA7`
 - `--bg`: `#050507`
@@ -24,23 +24,25 @@ The canonical token source is `design-tokens.json`. CSS variables in `src/styles
 - `--faint`: `#71798A`
 - `--border`: `rgba(255,255,255,0.10)`
 
-## Component Rules
+## 组件规则
 
-- Buttons use the brand blue only for primary actions and selected segmented controls.
-- Secondary buttons remain dark neutral with white borders.
-- Panels use 1px borders, `8px` radius, and compact padding.
-- Inputs match the canvas: black fill, white text, subtle border, blue focus ring.
-- Status colors are reserved for comparison states: success, review, fail.
-- The comparison frame should feel like a canvas surface, not a website card.
+- 主按钮和选中的分段控件才使用品牌蓝。
+- 次级按钮保持深色中性色和细边框。
+- 面板使用 1px 边框、`8px` 圆角和紧凑内边距。
+- 输入框和画布一致：黑色填充、浅色文字、弱边框、蓝色焦点环。
+- 状态色只用于比对结果：通过、待复查、不一致。
+- 比对区域应该像工作画布，不像营销卡片。
 
-## Framer Reference Cues
+## 文案规则
 
-Framer's current documentation describes light/dark canvas theme switching and uses a dark interface with tool controls and zoom in the canvas menu. Their developer docs also expose UI color roles such as background, divider, text, secondary text, tertiary text, and tint. This design borrows those structural cues while keeping Morkasa's brand blue.
+- 默认中文，不使用生硬直译。
+- 英文只在用户主动切换到 `EN` 时出现。
+- 面向用户的文字要短、准、像真实工具，不写说明书式长句。
 
-## Audit Notes
+## 审计记录
 
-- Color consistency: centralized tokens now control the dark UI.
-- Typography hierarchy: page title, section titles, labels, metrics, and table text have distinct sizes.
-- Spacing rhythm: compact `6/8/10/12/14/16` spacing drives controls and panels.
-- Dark mode: the entire application is dark-first, not a partial theme.
-- AI slop check: removed the previous light green SaaS palette and avoided purple/blue gradients, glass cards, and oversized hero treatment.
+- 颜色一致性：暗色 token 已集中管理。
+- 字体层级：标题、区块标题、标签、指标和表格文字有明确层级。
+- 间距节奏：控件和面板主要使用 `6/8/10/12/14/16`。
+- 暗色模式：现在是暗色优先，不是局部换色。
+- 通用 AI 味检查：避免紫蓝渐变、玻璃卡片、装饰性大首屏和无意义动效。
